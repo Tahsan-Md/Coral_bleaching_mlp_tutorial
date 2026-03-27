@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Predicting Coral Bleaching with MLPs — Tutorial</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Source+Serif+4:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ocean-deep: #0a1628;
+    --ocean-mid: #0d2845;
+    --ocean-surface: #1a4a6e;
+    --coral-warm: #e8735a;
+    --coral-pale: #f2a58e;
+    --seafoam: #4ecdc4;
+    --sand: #f5e6c8;
+    --text-primary: #f0ebe0;
+    --text-muted: #9bb5c9;
+    --text-body: #d4cfc3;
+    --accent-line: rgba(78,205,196,0.35);
+    --card-bg: rgba(13,40,69,0.7);
+    --code-bg: rgba(8,20,40,0.9);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background-color: var(--ocean-deep);
+    color: var(--text-body);
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-weight: 300;
+    line-height: 1.8;
+    font-size: 17px;
+    overflow-x: hidden;
+  }
+
+  /* Animated background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 10%, rgba(26,74,110,0.4) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(78,205,196,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse 100% 80% at 50% 50%, rgba(10,22,40,1) 40%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Subtle wave lines */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      180deg,
+      transparent,
+      transparent 80px,
+      rgba(78,205,196,0.02) 80px,
+      rgba(78,205,196,0.02) 81px
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 7rem 0 4rem;
+    text-align: center;
+    position: relative;
+  }
+
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--seafoam);
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease forwards 0.2s;
+  }
+
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.2rem, 5vw, 3.6rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.15;
+    margin-bottom: 1rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease forwards 0.4s;
+  }
+
+  .hero h1 em {
+    font-style: italic;
+    color: var(--coral-pale);
+  }
+
+  .hero-sub {
+    font-size: 1.05rem;
+    color: var(--text-muted);
+    max-width: 560px;
+    margin: 0 auto 2.5rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease forwards 0.6s;
+  }
+
+  .hero-meta {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    opacity: 0;
+    animation: fadeUp 0.8s ease forwards 0.8s;
+  }
+
+  .hero-meta span { color: var(--seafoam); }
+
+  .hero-divider {
+    width: 80px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--seafoam), transparent);
+    margin: 3rem auto 0;
+    opacity: 0;
+    animation: fadeUp 0.8s ease forwards 1s;
+  }
+
+  /* ── NAV ── */
+  .toc {
+    background: var(--card-bg);
+    border: 1px solid rgba(78,205,196,0.15);
+    border-left: 3px solid var(--seafoam);
+    border-radius: 4px;
+    padding: 1.8rem 2rem;
+    margin: 3rem 0 4rem;
+    backdrop-filter: blur(10px);
+  }
+
+  .toc-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--seafoam);
+    margin-bottom: 1rem;
+  }
+
+  .toc ol {
+    padding-left: 1.2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem 2rem;
+  }
+
+  .toc li { font-size: 0.9rem; color: var(--text-muted); }
+  .toc a { color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+  .toc a:hover { color: var(--seafoam); }
+
+  /* ── SECTIONS ── */
+  section { margin-bottom: 4rem; }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--coral-warm);
+    margin-bottom: 0.6rem;
+  }
+
+  h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+    margin-bottom: 1.5rem;
+  }
+
+  h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--sand);
+    margin: 2.2rem 0 0.8rem;
+  }
+
+  p { margin-bottom: 1.2rem; }
+
+  strong { color: var(--text-primary); font-weight: 600; }
+
+  a { color: var(--seafoam); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ── CALLOUTS ── */
+  .callout {
+    border-left: 3px solid var(--seafoam);
+    background: rgba(78,205,196,0.05);
+    padding: 1.2rem 1.5rem;
+    margin: 2rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .callout.warning {
+    border-color: var(--coral-warm);
+    background: rgba(232,115,90,0.06);
+  }
+
+  .callout.insight {
+    border-color: #f5c842;
+    background: rgba(245,200,66,0.05);
+  }
+
+  .callout-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+
+  .callout .callout-label { color: var(--seafoam); }
+  .callout.warning .callout-label { color: var(--coral-warm); }
+  .callout.insight .callout-label { color: #f5c842; }
+
+  /* ── CODE ── */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    color: var(--seafoam);
+    padding: 0.15em 0.45em;
+    border-radius: 3px;
+    border: 1px solid rgba(78,205,196,0.15);
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid rgba(78,205,196,0.15);
+    border-radius: 6px;
+    padding: 1.4rem 1.6rem;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.7;
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-body);
+    font-size: inherit;
+  }
+
+  .kw { color: #c792ea; }
+  .fn { color: #82aaff; }
+  .st { color: #c3e88d; }
+  .cm { color: #546e7a; font-style: italic; }
+  .nm { color: var(--coral-pale); }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    background: var(--code-bg);
+    border: 1px solid rgba(78,205,196,0.2);
+    border-radius: 8px;
+    padding: 2rem;
+    margin: 1.5rem 0;
+    overflow-x: auto;
+  }
+
+  .arch-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 0.4rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .arch-input { color: var(--text-muted); min-width: 120px; text-align: right; }
+  .arch-arrow { color: rgba(78,205,196,0.5); margin: 0 0.5rem; }
+  .arch-neuron {
+    background: rgba(26,74,110,0.8);
+    border: 1px solid rgba(78,205,196,0.3);
+    border-radius: 50%;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem;
+    color: var(--seafoam);
+    margin: 0 3px;
+  }
+  .arch-output { color: var(--coral-pale); min-width: 80px; margin-left: 0.5rem; }
+  .arch-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 0.5rem;
+    letter-spacing: 0.05em;
+  }
+  .arch-columns {
+    display: flex;
+    justify-content: center;
+    gap: 3.5rem;
+    text-align: center;
+    margin-top: 0.8rem;
+  }
+
+  /* ── DATA TABLE ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.88rem;
+  }
+
+  .data-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--seafoam);
+    border-bottom: 1px solid rgba(78,205,196,0.3);
+    padding: 0.7rem 1rem;
+    text-align: left;
+  }
+
+  .data-table td {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid rgba(78,205,196,0.07);
+    color: var(--text-body);
+    vertical-align: top;
+  }
+
+  .data-table tr:hover td { background: rgba(78,205,196,0.04); }
+
+  /* ── RESULTS BARS ── */
+  .results-grid { display: flex; flex-direction: column; gap: 0.7rem; margin: 1.5rem 0; }
+
+  .result-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+  }
+
+  .result-label { color: var(--text-muted); min-width: 90px; }
+
+  .result-bar-wrap {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    height: 8px;
+    overflow: hidden;
+  }
+
+  .result-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+
+  .result-val { color: var(--text-primary); min-width: 50px; }
+
+  /* ── INSIGHT GRID ── */
+  .insight-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .insight-card {
+    background: var(--card-bg);
+    border: 1px solid rgba(78,205,196,0.12);
+    border-radius: 6px;
+    padding: 1.2rem 1.4rem;
+    backdrop-filter: blur(8px);
+  }
+
+  .insight-card-icon {
+    font-size: 1.4rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .insight-card h4 {
+    font-family: 'Source Serif 4', serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    margin-bottom: 0.4rem;
+  }
+
+  .insight-card p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  /* ── REFERENCES ── */
+  .references { font-size: 0.85rem; }
+  .references li {
+    margin-bottom: 0.7rem;
+    padding-left: 0.5rem;
+    color: var(--text-muted);
+    list-style: none;
+    counter-increment: ref-counter;
+  }
+  .references li::before {
+    content: '[' counter(ref-counter) '] ';
+    color: var(--seafoam);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+  }
+  .references { counter-reset: ref-counter; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid rgba(78,205,196,0.1);
+    padding: 2.5rem 0 4rem;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  footer a { color: var(--seafoam); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── ACCESSIBILITY ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .fade-in { opacity: 1; transform: none; }
+  }
+
+  @media (max-width: 600px) {
+    .toc ol { grid-template-columns: 1fr; }
+    .insight-grid { grid-template-columns: 1fr; }
+    h2 { font-size: 1.6rem; }
+    .hero { padding: 4rem 0 2rem; }
+  }
+
+  /* High contrast focus for keyboard nav */
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--seafoam);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  hr.section-rule {
+    border: none;
+    border-top: 1px solid rgba(78,205,196,0.1);
+    margin: 3.5rem 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HERO -->
+  <header class="hero" role="banner">
+    <p class="hero-eyebrow">Machine Learning Tutorial</p>
+    <h1>Predicting Coral Bleaching<br>with <em>Multilayer Perceptrons</em></h1>
+    <p class="hero-sub">How network depth and width shape what a neural network can learn — and what happens when the data has no signal to give.</p>
+    <div class="hero-meta">
+      <div>Author <span>[Tahsan Mahmud]</span></div>
+      <div>GitHub <span><a href="https://github.com/Tahsan-Md/Coral_bleaching_mlp_tutorial.git" target="_blank" rel="noopener">[https://github.com/Tahsan-Md/Coral_bleaching_mlp_tutorial.git]</a></span></div>
+      <div>Dataset <span>Ocean Climate Records · 500 rows</span></div>
+    </div>
+    <div class="hero-divider" aria-hidden="true"></div>
+  </header>
+
+  <!-- TOC -->
+  <nav class="toc fade-in" aria-label="Table of contents">
+    <p class="toc-title">Contents</p>
+    <ol>
+      <li><a href="#background">What is an MLP?</a></li>
+      <li><a href="#dataset">The Dataset</a></li>
+      <li><a href="#eda">Exploring the Data</a></li>
+      <li><a href="#preprocessing">Preprocessing</a></li>
+      <li><a href="#baseline">Establishing a Baseline</a></li>
+      <li><a href="#depth">Experiment 1: Depth</a></li>
+      <li><a href="#width">Experiment 2: Width</a></li>
+      <li><a href="#results">Results &amp; Interpretation</a></li>
+      <li><a href="#takeaways">Key Takeaways</a></li>
+      <li><a href="#ethics">Ethical Considerations</a></li>
+      <li><a href="#references">References</a></li>
+    </ol>
+  </nav>
+
+  <!-- SECTION 1: BACKGROUND -->
+  <section id="background" class="fade-in">
+    <p class="section-label">Part 1</p>
+    <h2>What is a Multilayer Perceptron?</h2>
+
+    <p>A <strong>Multilayer Perceptron (MLP)</strong> is the simplest form of a deep neural network and the conceptual foundation on which modern architectures are built. It processes information in one direction — from inputs, through one or more hidden layers, to an output — and learns by adjusting the strength of connections between neurons.</p>
+
+    <p>Each neuron computes a weighted sum of its inputs, adds a bias term, and passes the result through a non-linear <strong>activation function</strong>. We use <strong>ReLU</strong> (<code>f(x) = max(0, x)</code>), which is computationally efficient and avoids the vanishing gradient problem that plagued earlier sigmoid-based networks.</p>
+
+    <!-- Architecture diagram -->
+    <div class="arch-diagram" role="img" aria-label="Diagram of a multilayer perceptron with input, two hidden layers, and output">
+      <div style="text-align:center; margin-bottom:1rem;">
+        <span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--text-muted); letter-spacing:0.1em;">MLP ARCHITECTURE — 2 HIDDEN LAYERS</span>
+      </div>
+      <div style="display:flex; justify-content:center; align-items:center; gap:1.5rem; flex-wrap:wrap;">
+        <div style="text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted); margin-bottom:0.6rem;">INPUT</div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="background:rgba(155,181,201,0.15); border:1px solid rgba(155,181,201,0.3); border-radius:3px; padding:3px 10px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted);">SST (°C)</div>
+            <div style="background:rgba(155,181,201,0.15); border:1px solid rgba(155,181,201,0.3); border-radius:3px; padding:3px 10px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted);">pH Level</div>
+            <div style="background:rgba(155,181,201,0.15); border:1px solid rgba(155,181,201,0.3); border-radius:3px; padding:3px 10px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted);">Latitude</div>
+            <div style="background:rgba(155,181,201,0.15); border:1px solid rgba(155,181,201,0.3); border-radius:3px; padding:3px 10px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted);">Longitude</div>
+            <div style="background:rgba(155,181,201,0.15); border:1px solid rgba(155,181,201,0.3); border-radius:3px; padding:3px 10px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted);">Species</div>
+            <div style="background:rgba(155,181,201,0.15); border:1px solid rgba(155,181,201,0.3); border-radius:3px; padding:3px 10px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-muted);">Heatwave</div>
+          </div>
+        </div>
+        <div style="color:rgba(78,205,196,0.4); font-size:1.2rem; font-family:'JetBrains Mono',monospace;">⟶⟶</div>
+        <div style="text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--seafoam); margin-bottom:0.6rem;">HIDDEN ×N</div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="background:rgba(78,205,196,0.1); border:1px solid rgba(78,205,196,0.3); border-radius:50px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.55rem; color:var(--seafoam); margin:0 auto;">ReLU</div>
+            <div style="background:rgba(78,205,196,0.1); border:1px solid rgba(78,205,196,0.3); border-radius:50px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.55rem; color:var(--seafoam); margin:0 auto;">ReLU</div>
+            <div style="background:rgba(78,205,196,0.1); border:1px solid rgba(78,205,196,0.3); border-radius:50px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.55rem; color:var(--seafoam); margin:0 auto;">ReLU</div>
+            <div style="color:var(--text-muted); font-size:1.2rem; text-align:center;">⋮</div>
+          </div>
+        </div>
+        <div style="color:rgba(78,205,196,0.4); font-size:1.2rem; font-family:'JetBrains Mono',monospace;">⟶⟶</div>
+        <div style="text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--coral-pale); margin-bottom:0.6rem;">OUTPUT</div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="background:rgba(242,165,142,0.1); border:1px solid rgba(242,165,142,0.4); border-radius:3px; padding:3px 12px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--coral-pale);">Low</div>
+            <div style="background:rgba(242,165,142,0.1); border:1px solid rgba(242,165,142,0.4); border-radius:3px; padding:3px 12px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--coral-pale);">Medium</div>
+            <div style="background:rgba(242,165,142,0.1); border:1px solid rgba(242,165,142,0.4); border-radius:3px; padding:3px 12px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--coral-pale);">High</div>
+          </div>
+        </div>
+      </div>
+      <p style="text-align:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--text-muted); margin-top:1rem;">
+        Depth = number of hidden layers &nbsp;|&nbsp; Width = neurons per layer &nbsp;|&nbsp; Softmax on output
+      </p>
+    </div>
+
+    <h3>Depth vs. Width</h3>
+    <p><strong>Depth</strong> refers to the number of hidden layers. Deeper networks can represent increasingly abstract, hierarchical features — an intuition borrowed from how the visual cortex processes images. <strong>Width</strong> refers to the number of neurons per layer, governing how much capacity each layer has to represent complex patterns.</p>
+
+    <p>The <strong>Universal Approximation Theorem</strong> (Cybenko, 1989) provides theoretical grounding: a single hidden layer with sufficient neurons can approximate any continuous function. In practice, however, depth allows more efficient approximation with fewer total parameters, which is why modern deep learning favours depth over extreme width.</p>
+
+    <h3>Training</h3>
+    <p>The network learns by minimising <strong>cross-entropy loss</strong> — a measure of how wrong the predicted class probabilities are compared to the true labels. Weights are updated via <strong>backpropagation</strong>, which computes the gradient of the loss with respect to every weight using the chain rule, and <strong>Adam</strong>, an adaptive gradient descent optimiser that adjusts the learning rate individually for each parameter.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 2: DATASET -->
+  <section id="dataset" class="fade-in">
+    <p class="section-label">Part 2</p>
+    <h2>The Dataset</h2>
+
+    <p>We use a synthetic ocean climate dataset spanning seven reef systems: the Red Sea, Great Barrier Reef, Caribbean Sea, Galápagos, South China Sea, Maldives, and Hawaiian Islands. Each of the 500 weekly records contains environmental measurements and a bleaching severity label.</p>
+
+    <table class="data-table" aria-label="Dataset feature descriptions">
+      <thead>
+        <tr>
+          <th scope="col">Feature</th>
+          <th scope="col">Type</th>
+          <th scope="col">Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>SST (°C)</code></td><td>Continuous</td><td>Sea surface temperature, range 23.6–33.2°C</td></tr>
+        <tr><td><code>pH Level</code></td><td>Continuous</td><td>Ocean acidity, range 7.87–8.20</td></tr>
+        <tr><td><code>Latitude / Longitude</code></td><td>Continuous</td><td>Geographic coordinates of observation</td></tr>
+        <tr><td><code>Species Observed</code></td><td>Integer</td><td>Count of marine species recorded (54–171)</td></tr>
+        <tr><td><code>Marine Heatwave</code></td><td>Boolean</td><td>Whether a heatwave event was active</td></tr>
+        <tr><td><code>Bleaching Severity</code></td><td>Target</td><td>Low / Medium / High (150 rows missing)</td></tr>
+      </tbody>
+    </table>
+
+    <p>After dropping the 150 rows with missing labels, we have <strong>350 usable samples</strong> with a roughly balanced distribution: 132 Low, 130 Medium, and 88 High severity observations.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 3: EDA -->
+  <section id="eda" class="fade-in">
+    <p class="section-label">Part 3</p>
+    <h2>Exploring the Data — and Discovering a Problem</h2>
+
+    <p>Before writing a single line of model code, we visualised the data. The scatter plot of SST versus pH coloured by bleaching severity revealed something important: <strong>the three classes overlap completely</strong>. There are no visible boundaries, no clusters, no gradients that a model could follow.</p>
+
+    <p>To test this formally, we ran a <strong>one-way ANOVA</strong> — a statistical test asking: do mean feature values differ significantly between bleaching severity groups?</p>
+
+    <pre><code><span class="kw">from</span> scipy.stats <span class="kw">import</span> f_oneway
+
+<span class="kw">for</span> feat <span class="kw">in</span> [<span class="st">'SST (°C)'</span>, <span class="st">'pH Level'</span>, <span class="st">'Species Observed'</span>]:
+    groups = [df[df[<span class="st">'Bleaching Severity'</span>]==sev][feat].values
+              <span class="kw">for</span> sev <span class="kw">in</span> [<span class="st">'Low'</span>, <span class="st">'Medium'</span>, <span class="st">'High'</span>]]
+    f, p = <span class="fn">f_oneway</span>(*groups)
+    <span class="fn">print</span>(<span class="st">f"</span>{feat}<span class="st">: F=</span>{f:.3f}<span class="st">, p=</span>{p:.4f}<span class="st">"</span>)</code></pre>
+
+    <p>The results were unambiguous:</p>
+
+    <table class="data-table" aria-label="ANOVA test results for each feature">
+      <thead>
+        <tr><th scope="col">Feature</th><th scope="col">F-statistic</th><th scope="col">p-value</th><th scope="col">Verdict</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>SST (°C)</code></td><td>0.161</td><td>0.8517</td><td style="color:var(--coral-warm);">Not significant</td></tr>
+        <tr><td><code>pH Level</code></td><td>0.126</td><td>0.8819</td><td style="color:var(--coral-warm);">Not significant</td></tr>
+        <tr><td><code>Species Observed</code></td><td>0.046</td><td>0.9548</td><td style="color:var(--coral-warm);">Not significant</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout insight">
+      <p class="callout-label">💡 Key Insight</p>
+      <p>All p-values are far above 0.05. The bleaching severity labels show <strong>no statistically significant relationship</strong> to any of the measured features. This indicates the dataset is synthetic — labels were assigned independently of the environmental data. This is not a modelling problem we can solve; it is a data quality problem.</p>
+    </div>
+
+    <p>This finding shapes everything that follows. We continue the tutorial not because we expect high accuracy, but because the depth/width experiments still teach us exactly what we need to know — including how to recognise when a model has reached the limits of what the data can tell it.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 4: PREPROCESSING -->
+  <section id="preprocessing" class="fade-in">
+    <p class="section-label">Part 4</p>
+    <h2>Preprocessing: Getting Data Ready for an MLP</h2>
+
+    <p>MLPs require numerical inputs and are sensitive to the scale of those inputs. Our preprocessing pipeline has four steps:</p>
+
+    <p><strong>1. Drop missing labels.</strong> We remove the 150 rows where <code>Bleaching Severity</code> is NaN, leaving 350 usable samples.</p>
+
+    <p><strong>2. Encode the target.</strong> Scikit-learn's <code>LabelEncoder</code> maps our string labels to integers: High→0, Low→1, Medium→2 (alphabetical order).</p>
+
+    <p><strong>3. Feature scaling.</strong> This is the most critical step. Consider that Longitude ranges from −155 to +148, while pH ranges from 7.87 to 8.20. Without scaling, gradient updates during training would be dominated by the large-range features, making convergence slow and unstable. <code>StandardScaler</code> transforms each feature to zero mean and unit variance.</p>
+
+    <div class="callout warning">
+      <p class="callout-label">⚠ Common Mistake</p>
+      <p>Always fit the scaler on the <em>training set only</em>, then apply it to the test set using <code>.transform()</code> — never <code>.fit_transform()</code>. Fitting on test data would leak information about the test distribution into training, artificially inflating performance estimates.</p>
+    </div>
+
+    <pre><code>scaler = <span class="fn">StandardScaler</span>()
+X_train_scaled = scaler.<span class="fn">fit_transform</span>(X_train)   <span class="cm"># fit + transform on train</span>
+X_test_scaled  = scaler.<span class="fn">transform</span>(X_test)         <span class="cm"># transform only on test</span></code></pre>
+
+    <p><strong>4. Train/test split.</strong> We use an 80/20 split with stratification, ensuring the class proportions are preserved in both sets.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 5: BASELINE -->
+  <section id="baseline" class="fade-in">
+    <p class="section-label">Part 5</p>
+    <h2>Establishing a Baseline</h2>
+
+    <p>Before building any neural network, define the floor. A <strong>majority class classifier</strong> always predicts the most frequent label — in our case, "Low" (37.7% of samples). If our MLP cannot consistently beat this, it has not learned anything useful.</p>
+
+    <pre><code>dummy = <span class="fn">DummyClassifier</span>(strategy=<span class="st">'most_frequent'</span>)
+dummy.<span class="fn">fit</span>(X_train, y_train)
+baseline_acc = dummy.<span class="fn">score</span>(X_test, y_test)
+<span class="cm"># → 0.371</span></code></pre>
+
+    <p>Our baseline accuracy is <strong>37.1%</strong>. Every model result reported below must be understood relative to this number.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 6: DEPTH -->
+  <section id="depth" class="fade-in">
+    <p class="section-label">Part 6</p>
+    <h2>Experiment 1 — The Effect of Depth</h2>
+
+    <p>We fix the width at <strong>64 neurons per layer</strong> and train MLPs with 1, 2, 3, 4, and 5 hidden layers. Because our dataset only has 350 labelled samples, a single train/test split would be noisy. Instead we use <strong>5-fold cross-validation</strong>, which trains five models on different data partitions and reports the mean accuracy with a standard deviation error bar.</p>
+
+    <pre><code><span class="kw">for</span> d <span class="kw">in</span> [<span class="nm">1</span>, <span class="nm">2</span>, <span class="nm">3</span>, <span class="nm">4</span>, <span class="nm">5</span>]:
+    arch = <span class="fn">tuple</span>([<span class="nm">64</span>] * d)   <span class="cm"># e.g. (64, 64, 64) for depth 3</span>
+    mlp = <span class="fn">MLPClassifier</span>(hidden_layer_sizes=arch,
+                         activation=<span class="st">'relu'</span>, solver=<span class="st">'adam'</span>,
+                         max_iter=<span class="nm">1000</span>, random_state=<span class="nm">42</span>)
+    scores = <span class="fn">cross_val_score</span>(mlp, X_scaled, y, cv=<span class="nm">5</span>)</code></pre>
+
+    <p>Results across depths 1–5 (CV mean ± std):</p>
+
+    <div class="results-grid" role="list">
+      <div class="result-row" role="listitem">
+        <span class="result-label">Depth 1</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:59%; background: linear-gradient(90deg, var(--seafoam), rgba(78,205,196,0.5))"></div></div>
+        <span class="result-val">0.354 ±0.061</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Depth 2</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:58.5%; background: linear-gradient(90deg, var(--seafoam), rgba(78,205,196,0.5))"></div></div>
+        <span class="result-val">0.351 ±0.060</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Depth 3</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:53.8%; background: linear-gradient(90deg, var(--seafoam), rgba(78,205,196,0.5))"></div></div>
+        <span class="result-val">0.323 ±0.058</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Depth 4</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:54.8%; background: linear-gradient(90deg, var(--seafoam), rgba(78,205,196,0.5))"></div></div>
+        <span class="result-val">0.329 ±0.033</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Depth 5</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:58.5%; background: linear-gradient(90deg, var(--seafoam), rgba(78,205,196,0.5))"></div></div>
+        <span class="result-val">0.351 ±0.041</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label" style="color:var(--coral-warm);">Baseline</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:62%; background: linear-gradient(90deg, var(--coral-warm), rgba(232,115,90,0.5))"></div></div>
+        <span class="result-val" style="color:var(--coral-warm);">0.377</span>
+      </div>
+    </div>
+
+    <p>No depth configuration meaningfully beats the baseline. The large standard deviations (±0.03–0.06) confirm the model is essentially fitting noise, with results varying substantially across the five folds. Depth 3 even performs <em>worse</em> than a 1-layer network, suggesting that adding depth without signal leads to instability rather than improvement.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 7: WIDTH -->
+  <section id="width" class="fade-in">
+    <p class="section-label">Part 7</p>
+    <h2>Experiment 2 — The Effect of Width</h2>
+
+    <p>We fix depth at <strong>2 hidden layers</strong> and vary the number of neurons per layer across 8, 16, 32, 64, 128, and 256. This covers a 32× range of capacity per layer.</p>
+
+    <div class="results-grid" role="list">
+      <div class="result-row" role="listitem">
+        <span class="result-label">Width 8</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:62%; background: linear-gradient(90deg, #c0392b, rgba(192,57,43,0.5))"></div></div>
+        <span class="result-val">0.374 ±0.038</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Width 16</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:59.5%; background: linear-gradient(90deg, #c0392b, rgba(192,57,43,0.5))"></div></div>
+        <span class="result-val">0.357 ±0.009</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Width 32</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:60.5%; background: linear-gradient(90deg, #c0392b, rgba(192,57,43,0.5))"></div></div>
+        <span class="result-val">0.363 ±0.066</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Width 64</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:58.5%; background: linear-gradient(90deg, #c0392b, rgba(192,57,43,0.5))"></div></div>
+        <span class="result-val">0.351 ±0.060</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Width 128</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:53.3%; background: linear-gradient(90deg, #c0392b, rgba(192,57,43,0.5))"></div></div>
+        <span class="result-val">0.320 ±0.033</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label">Width 256</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:58.2%; background: linear-gradient(90deg, #c0392b, rgba(192,57,43,0.5))"></div></div>
+        <span class="result-val">0.349 ±0.032</span>
+      </div>
+      <div class="result-row" role="listitem">
+        <span class="result-label" style="color:var(--coral-warm);">Baseline</span>
+        <div class="result-bar-wrap"><div class="result-bar" style="width:62.8%; background: linear-gradient(90deg, var(--coral-warm), rgba(232,115,90,0.5))"></div></div>
+        <span class="result-val" style="color:var(--coral-warm);">0.377</span>
+      </div>
+    </div>
+
+    <p>Width 8 marginally matches the baseline — but not because it has learned anything; a very narrow network essentially converges to predicting the majority class. Width 128 performs <em>worse</em> than width 8, an example of a large model overfitting to noise. The results across the full width range are statistically indistinguishable from random given the standard deviations.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 8: RESULTS -->
+  <section id="results" class="fade-in">
+    <p class="section-label">Part 8</p>
+    <h2>Results and Interpretation</h2>
+
+    <p>Across 11 total model configurations — spanning depths 1–5 and widths 8–256 — no MLP meaningfully outperformed the majority-class baseline of 37.7%. The confusion matrix of the best model shows it defaults heavily to predicting "Low" and "Medium", with little reliable distinction between classes.</p>
+
+    <div class="callout">
+      <p class="callout-label">📊 The Honest Verdict</p>
+      <p>These results are not a failure of the MLP. They are a direct consequence of the dataset. The ANOVA confirmed that bleaching labels have no statistical relationship to any measured feature. <strong>No model — however deep or wide, however well-tuned — can extract signal that does not exist in the data.</strong></p>
+    </div>
+
+    <h3>What would we expect with real data?</h3>
+    <p>Hughes et al. (2017) demonstrated that mass bleaching events are strongly correlated with thermal anomalies — specifically <em>degree heating weeks</em>, a cumulative measure of SST above the local bleaching threshold. A dataset capturing genuine SST–bleaching relationships would look very different in our experiments:</p>
+    <ul style="margin: 1rem 0 1rem 1.5rem; color: var(--text-body);">
+      <li style="margin-bottom:0.5rem;">Accuracy well above the baseline for even shallow networks</li>
+      <li style="margin-bottom:0.5rem;">A clear optimal depth beyond which overfitting sets in</li>
+      <li style="margin-bottom:0.5rem;">A width sweet spot where capacity matches dataset complexity</li>
+      <li style="margin-bottom:0.5rem;">Standard deviations shrinking as depth/width approach the optimum</li>
+    </ul>
+    <p>This would give us the classic <strong>bias-variance tradeoff</strong> curve: too shallow produces underfitting (high bias), too deep produces overfitting (high variance), and the sweet spot sits in between.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 9: TAKEAWAYS -->
+  <section id="takeaways" class="fade-in">
+    <p class="section-label">Part 9</p>
+    <h2>Key Takeaways</h2>
+
+    <div class="insight-grid">
+      <div class="insight-card">
+        <div class="insight-card-icon" aria-hidden="true">📐</div>
+        <h4>Scale your features</h4>
+        <p>Always apply StandardScaler before training an MLP. Fit it on train only, apply to test. Non-negotiable.</p>
+      </div>
+      <div class="insight-card">
+        <div class="insight-card-icon" aria-hidden="true">📊</div>
+        <h4>Establish a baseline first</h4>
+        <p>A majority-class classifier costs nothing to build. Any model that can't beat it has not learned.</p>
+      </div>
+      <div class="insight-card">
+        <div class="insight-card-icon" aria-hidden="true">🔁</div>
+        <h4>Use cross-validation</h4>
+        <p>On small datasets, a single split is too noisy. 5-fold CV gives you uncertainty estimates alongside accuracy.</p>
+      </div>
+      <div class="insight-card">
+        <div class="insight-card-icon" aria-hidden="true">🔍</div>
+        <h4>Check your data first</h4>
+        <p>ANOVA and scatter plots take minutes. A simple statistical check caught the core problem before any model was trained.</p>
+      </div>
+      <div class="insight-card">
+        <div class="insight-card-icon" aria-hidden="true">⚖️</div>
+        <h4>Data quality > architecture</h4>
+        <p>No depth or width compensates for a dataset where labels are unrelated to features. Garbage in, garbage out.</p>
+      </div>
+      <div class="insight-card">
+        <div class="insight-card-icon" aria-hidden="true">📖</div>
+        <h4>The UAT has a catch</h4>
+        <p>The Universal Approximation Theorem assumes the function exists in the data. Approximating noise is still noise.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- SECTION 10: ETHICS -->
+  <section id="ethics" class="fade-in">
+    <p class="section-label">Part 10</p>
+    <h2>Ethical Considerations</h2>
+
+    <p>Deploying machine learning in environmental monitoring is not a neutral act. Coral reefs are among the most biodiverse and threatened ecosystems on Earth, and decisions informed by predictive models carry real ecological stakes.</p>
+
+    <p><strong>False negatives are costly.</strong> A model that predicts "Low" severity when the true severity is "High" could delay conservation interventions — emergency cooling, reduced tourist disturbance, targeted coral rescue — by days or weeks that matter. Model uncertainty should always be communicated to decision-makers, not buried in a single predicted label.</p>
+
+    <p><strong>Geographic bias limits generalisability.</strong> A model trained on seven reef systems cannot be assumed to generalise to the full diversity of the world's reefs. The Great Barrier Reef, the Red Sea, and the Caribbean have different species compositions, thermal histories, and local stressors. Deploying a model beyond its training distribution without validation is irresponsible.</p>
+
+    <p><strong>Synthetic data should be clearly labelled.</strong> In research and teaching, using synthetic datasets is legitimate — but they must be flagged as such. Presenting synthetic results as if they reflect real ecological relationships could mislead other researchers or policymakers.</p>
+
+    <p><strong>Data collection ethics matter too.</strong> Gathering real reef data requires underwater surveys, remote sensing, and water chemistry sampling, all of which must follow ethical marine research protocols that minimise physical disturbance to the ecosystems being studied.</p>
+  </section>
+
+  <hr class="section-rule">
+
+  <!-- REFERENCES -->
+  <section id="references" class="fade-in">
+    <p class="section-label">References</p>
+    <h2>Further Reading</h2>
+    <ol class="references">
+      <li>Goodfellow, I., Bengio, Y., &amp; Courville, A. (2016). <em>Deep Learning</em>. MIT Press. <a href="https://www.deeplearningbook.org/" target="_blank" rel="noopener">deeplearningbook.org</a></li>
+      <li>Cybenko, G. (1989). Approximation by superpositions of a sigmoidal function. <em>Mathematics of Control, Signals and Systems</em>, 2(4), 303–314.</li>
+      <li>Hughes, T. P. et al. (2017). Global warming and recurrent mass bleaching of corals. <em>Nature</em>, 543, 373–377. <a href="https://doi.org/10.1038/nature21707" target="_blank" rel="noopener">doi.org/10.1038/nature21707</a></li>
+      <li>Scikit-learn: Pedregosa et al. (2011). Scikit-learn: Machine Learning in Python. <em>JMLR</em>, 12, 2825–2830. <a href="https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html" target="_blank" rel="noopener">MLPClassifier docs</a></li>
+      <li>Universal Approximation Theorem. Wikipedia. <a href="https://en.wikipedia.org/wiki/Universal_approximation_theorem" target="_blank" rel="noopener">en.wikipedia.org</a></li>
+    </ol>
+  </section>
+
+  <footer>
+    <p>Tutorial code available on <a href="#">GitHub [Your Repo URL]</a> &nbsp;·&nbsp; MIT Licence &nbsp;·&nbsp; [Your Name] · [Year]</p>
+  </footer>
+
+</div>
+
+<script>
+  // Intersection Observer for fade-in animations
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
